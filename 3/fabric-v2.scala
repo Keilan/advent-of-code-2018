@@ -1,5 +1,3 @@
-#!/usr/bin/env scala
-
 object Fabric {
     case class Claim(id: Int, left: Int, top: Int, width: Int, height: Int) {
         def columns = top until top + height
@@ -42,3 +40,5 @@ object Fabric {
         Claim(data(0).toInt, data(1).toInt, data(2).toInt, data(3).toInt, data(4).toInt)
     }
 }
+
+Fabric.main(args)

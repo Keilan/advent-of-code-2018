@@ -1,5 +1,8 @@
+#!/usr/bin/env scala
+
 object Polymer {
   def main(args: Array[String]): Unit = {
+    println("main")
     var polymer = scala.io.StdIn.readLine()
     var reduced = ""
     println("Initial Reduction")

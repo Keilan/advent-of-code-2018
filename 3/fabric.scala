@@ -1,5 +1,3 @@
-#!/usr/bin/env scala
-
 object Fabric {
     def main(args: Array[String]): Unit = {
         // Setup Map
