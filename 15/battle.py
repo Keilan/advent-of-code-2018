@@ -59,7 +59,7 @@ class Unit:
         # Find tiles in range to an enemy
         in_range_tiles = set()  #Set to avoid duplicates
         for u in units:
-            if u.race == self.race:
+            if u.race == self.race or u.dead:
                 continue
             in_range_tiles.update(u.find_open_tiles(arena, units))
 
@@ -99,16 +99,16 @@ class Unit:
 
         # Find reachable tiles
         in_range = self.find_in_range_tiles(arena, units)
-        reachable, paths = filter_reachable(self.x, self.y, in_range, arena, units)
+        target, paths = find_target_tile(self.x, self.y, in_range, arena, units)
 
-        # Sort by path_length, then reading order
-        reachable = sorted(reachable, key=lambda t: (t[2], t[0], t[1]))
-        if len(reachable) == 0:
+        if target is None:
             return 'no-reachable', {}
-        dest_x, dest_y, distance = reachable[0]
 
-        # Find first step towards destination
-        x, y = find_next_step((self.x, self.y), (dest_x, dest_y), paths)
+        # If multiple paths exist, pick the starting point using reading order
+        optimal_paths = find_optimal_paths((self.x, self.y), target, paths)
+        choices = sorted([op[0] for op in optimal_paths])
+        x, y = choices[0]
+
         # Update position
         self.x = x
         self.y = y
@@ -182,65 +182,81 @@ def unit_at(x, y, units):
     return None
 
 
-def filter_reachable(x, y, tiles, arena, units):
-    """
-    Given a list of tiles and an x,y coordinate, returns only the tiles in the list that
-    are reachable from the given coordinate, adding a third value, indicating the distance to
-    reach the tile.
-    """
-    # Map units as walls for simplicity
+def find_target_tile(src_x, src_y, tiles, arena, units):
     arena_copy = copy.deepcopy(arena)
     for u in units:
         if u.dead:
             continue
         arena_copy[u.x][u.y] = '#'
-    arena_copy[x][y] = '.'  #Set this back to open as it's our starting point
+    arena_copy[src_x][src_y] = '.'  #Set this back to open as it's our starting point
 
-    # Recursively find all reachable tiles and the minimum path
-    def update_reachable(tile, reachable, path, paths):
-        """
-        Tile specifies the x,y coordinates of the starting point, reachable is the set of all
-        reachable tiles, path is the current path travelled to get to this point, and paths is a
-        dictionary mapping an (x,y) tuple to a dictionary mapping (prev_x, prev_y), to
-        the distance travelled to get to the given key via (prev_x, prev_y).
-        """
-        #sys.stdout.write('.')
-        x, y = tile
+    # Initialize Djikstra's Algorithm
+    unvisited = set()
+    dist = {}
+    prev = {}
+    for x, row in enumerate(arena_copy):
+        for y, tile in enumerate(row):
+            if arena_copy[x][y] == '.':
+                dist[(x, y)] = float('inf')
+                prev[(x, y)] = None
+                unvisited.add((x, y))
 
-        # Not reachable if a wall or unit
-        if arena_copy[x][y] == '#':
+    # Set source to 0
+    dist[(src_x, src_y)] = 0
+
+    # Iterate through set
+    while unvisited:
+        # Find min
+        min_value = float('inf')
+        selected = None
+        for node in unvisited:
+            if dist[node] < min_value:
+                min_value = dist[node]
+                selected = node
+
+        # End looping is no nodes are accessible
+        if selected is None:
+            break
+
+        unvisited.remove(selected)
+
+        node_x, node_y = selected
+        for x, y in [(node_x+1, node_y), (node_x, node_y+1), (node_x-1, node_y), (node_x, node_y-1)]:
+            if (x, y) in unvisited:
+                new_distance = dist[(node_x, node_y)] + 1
+                if new_distance < dist[(x, y)]:
+                    dist[(x, y)] = new_distance
+                    prev[(x, y)] = [selected]
+                elif new_distance == dist[(x, y)]:
+                    prev[(x, y)].append(selected)
+
+    # Filter out unreachable and unconsidered values
+    distances = {k: v for k, v in dist.items() if k in tiles and v != float('inf')}
+    if len(distances) == 0:
+        return None, None
+
+    target = sorted([(v, k[0], k[1]) for k, v in distances.items()])[0]
+    target = (target[1], target[2])  #Extract x,y coords
+
+    return target, prev
+
+
+def find_optimal_paths(source, target, graph):
+    # Because the graph gives the previous item, work backwards from target
+    def update_paths(source, current, path, graph, optimal_paths):
+        # If we've found the target, record the path
+        if source == current:
+            optimal_paths.append(path)
             return
 
-        # Get previous space for updating path
-        prev_space = (path[-1][0], path[-1][1]) if path else None
+        cur_x, cur_y = current
+        for x, y in graph[current]:
+            path = (current,) + path
+            update_paths(source, (x, y), path, graph, optimal_paths)
 
-        # Already seen and faster
-        if tile in reachable and prev_space in paths[tile] and paths[tile][prev_space] <= len(path):
-            return
-
-        # Add to reachable and update distances
-        reachable.add(tile)
-
-        distance = len(path) if prev_space is not None else float('inf')
-        if tile in paths:
-            paths[tile][prev_space] = distance
-        else:
-            paths[tile] = {prev_space: distance}
-
-        # Add all adjacent
-        path = path + ((x, y),)
-        for adjacent_tile in [(x+1, y), (x, y+1), (x-1, y), (x, y-1)]:
-            update_reachable(adjacent_tile, reachable, path, paths)
-
-    reachable = set()
-    paths = {}
-    update_reachable((x, y), reachable, (), paths)
-
-    # Filter out unreachable tiles
-    tiles = tiles.intersection(reachable)
-
-    # Append distances
-    return [(t[0], t[1], min(paths[t].values())) for t in tiles], paths
+    optimal_paths = []
+    update_paths(source, target, (), graph, optimal_paths)
+    return optimal_paths
 
 
 def find_next_step(start, end, paths):
@@ -299,36 +315,48 @@ def battle():
     round_end = time.time()
     arena, units = read_arena()
 
-    print('Start')
-    print_arena(arena, units)
-    completed_rounds = 0
-    completed = True
+    initial_arena = copy.deepcopy(arena)
+    initial_units = copy.deepcopy(units)
 
-    while completed:
-        completed = perform_round(arena, units)
+    #Loop until no deaths
+    deaths = 1
+    power = 2
 
-        if not completed:
-            print('Game Over')
-        else:
-            completed_rounds += 1
-            print('\nRound {} - {:.2f}s/{:.2f}s'.format(completed_rounds,
-                                                      time.time() - round_end,
-                                                      time.time() - start))
-            round_end = time.time()
-            print_arena(arena, units)
+    while deaths > 0:
+        #Update elf powers
+        power += 1
+        arena = copy.deepcopy(initial_arena)
+        units = copy.deepcopy(initial_units)
+        for u in units:
+            if u.race == 'elf':
+                u.attack = power
 
-    remaining_units = [u for u in units if not u.dead]
-    sum_hit_points = sum([u.hp for u in remaining_units])
-    print('{} race won with {} remaining hit points in {} rounds'.format(remaining_units[0].race.title(),
-                                                                         sum_hit_points,
-                                                                         completed_rounds))
-    print('Final Score is {}'.format(sum_hit_points*completed_rounds))
-    print('Completed in {:.2f}s'.format(time.time() - start))
+        print('Start - Attack Power {}'.format(power))
+        #print_arena(arena, units)
+        completed_rounds = 0
+        completed = True
+
+        while completed:
+            completed = perform_round(arena, units)
+
+            if completed:
+                completed_rounds += 1
+                #print('Round {} - {:.2f}s/{:.2f}s'.format(completed_rounds,
+                                                          #time.time() - round_end,
+                                                          #time.time() - start))
+                round_end = time.time()
+                #print_arena(arena, units)
+
+        deaths = len([u for u in units if u.dead and u.race == 'elf'])
+        remaining_units = [u for u in units if not u.dead]
+        sum_hit_points = sum([u.hp for u in remaining_units])
+        print('{} race won with {} remaining hit points in {} rounds'.format(remaining_units[0].race.title(),
+                                                                             sum_hit_points,
+                                                                             completed_rounds))
+        print('There were {} dead elves'.format(deaths))
+        print('Final Score is {}'.format(sum_hit_points*completed_rounds))
+        print('Completed in {:.2f}s'.format(time.time() - start))
+        print()
+
 
 battle()
-
-
-"""
-Part 1
-1. 206585 - Wrong, too low
-"""
