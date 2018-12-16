@@ -1,5 +1,6 @@
 import sys
 import copy
+import time
 
 
 class Unit:
@@ -98,22 +99,16 @@ class Unit:
 
         # Find reachable tiles
         in_range = self.find_in_range_tiles(arena, units)
-        reachable = filter_reachable(self.x, self.y, in_range, arena, units)
+        reachable, paths = filter_reachable(self.x, self.y, in_range, arena, units)
 
         # Sort by path_length, then reading order
-        reachable = sorted(reachable, key=lambda t: (len(t[2][0]), t[0], t[1]))
+        reachable = sorted(reachable, key=lambda t: (t[2], t[0], t[1]))
         if len(reachable) == 0:
             return 'no-reachable', {}
-        choice = reachable[0]
+        dest_x, dest_y, distance = reachable[0]
 
-        # Find first path location in reading order (note that first element is the current pos)
-        paths = choice[2]
-        if len(paths[0]) > 1:
-            paths = sorted(paths, key=lambda p: (p[1][0], p[1][1]))
-            x, y = paths[0][1]
-        else:
-            x, y = choice[0], choice[1]  # No intermediate path, just move to destination
-
+        # Find first step towards destination
+        x, y = find_next_step((self.x, self.y), (dest_x, dest_y), paths)
         # Update position
         self.x = x
         self.y = y
@@ -193,40 +188,44 @@ def filter_reachable(x, y, tiles, arena, units):
     are reachable from the given coordinate, adding a third value, indicating the distance to
     reach the tile.
     """
-    print('filter', x, y)
     # Map units as walls for simplicity
     arena_copy = copy.deepcopy(arena)
     for u in units:
+        if u.dead:
+            continue
         arena_copy[u.x][u.y] = '#'
     arena_copy[x][y] = '.'  #Set this back to open as it's our starting point
 
     # Recursively find all reachable tiles and the minimum path
     def update_reachable(tile, reachable, path, paths):
+        """
+        Tile specifies the x,y coordinates of the starting point, reachable is the set of all
+        reachable tiles, path is the current path travelled to get to this point, and paths is a
+        dictionary mapping an (x,y) tuple to a dictionary mapping (prev_x, prev_y), to
+        the distance travelled to get to the given key via (prev_x, prev_y).
+        """
+        #sys.stdout.write('.')
         x, y = tile
 
         # Not reachable if a wall or unit
         if arena_copy[x][y] == '#':
             return
 
-        # Already seen and faster
-        if tile in reachable and len(paths[tile][0]) < len(path):
-            return
+        # Get previous space for updating path
+        prev_space = (path[-1][0], path[-1][1]) if path else None
 
-        # Already seen and slower (delete existing)
-        if tile in reachable and len(paths[tile][0]) > len(path):
-            print('Deleting', tile)
-            del paths[tile]
+        # Already seen and faster
+        if tile in reachable and prev_space in paths[tile] and paths[tile][prev_space] <= len(path):
+            return
 
         # Add to reachable and update distances
         reachable.add(tile)
+
+        distance = len(path) if prev_space is not None else float('inf')
         if tile in paths:
-            paths[tile].append(path)
-            if len(paths[tile]) > 100:
-                return
-            print('Updating', tile, len(paths[tile]))
+            paths[tile][prev_space] = distance
         else:
-            print('Adding', tile)
-            paths[tile] = [path]
+            paths[tile] = {prev_space: distance}
 
         # Add all adjacent
         path = path + ((x, y),)
@@ -241,7 +240,43 @@ def filter_reachable(x, y, tiles, arena, units):
     tiles = tiles.intersection(reachable)
 
     # Append distances
-    return [(t[0], t[1], paths[t]) for t in tiles]
+    return [(t[0], t[1], min(paths[t].values())) for t in tiles], paths
+
+
+def find_next_step(start, end, paths):
+    """
+    Given initial and final (x,y) coordinates and a dictionary of partial paths, return the
+    next step towards reaching
+    """
+    def find_paths(start, current, distance, paths, choices):
+        """
+        Given the start point, and the current point, builds a dictionary indicating the first step
+        and the minimum distance to the end using that step. Distance indicates the distance from
+        current to end.
+        """
+        # Find all paths resulting in the minimum distance
+        options = []
+        min_distance = min(paths[current].values())
+        for option, distance in paths[current].items():
+            if distance == min_distance:
+
+                # If we find the beginning, break out
+                if option == start:
+                    if option not in choices or choices[current] < distance + min_distance:
+                        choices[current] = distance + min_distance
+                    return
+
+                # Add to list of options
+                options.append(option)
+
+        # For each path, recursively find minimal paths
+        for option in options:
+            find_paths(start, option, min_distance, paths, choices)
+
+    choices = {}
+    find_paths(start, end, 0, paths, choices)
+    choices = sorted(choices.keys())
+    return choices[0]
 
 
 def perform_round(arena, units):
@@ -260,6 +295,8 @@ def perform_round(arena, units):
 
 
 def battle():
+    start = time.time()
+    round_end = time.time()
     arena, units = read_arena()
 
     print('Start')
@@ -274,10 +311,24 @@ def battle():
             print('Game Over')
         else:
             completed_rounds += 1
-            print('\nRound ', completed_rounds)
+            print('\nRound {} - {:.2f}s/{:.2f}s'.format(completed_rounds,
+                                                      time.time() - round_end,
+                                                      time.time() - start))
+            round_end = time.time()
             print_arena(arena, units)
 
-    sum_hit_points = sum([u.hp for u in units if not u.dead])
-    print(sum_hit_points, sum_hit_points*completed_rounds)
+    remaining_units = [u for u in units if not u.dead]
+    sum_hit_points = sum([u.hp for u in remaining_units])
+    print('{} race won with {} remaining hit points in {} rounds'.format(remaining_units[0].race.title(),
+                                                                         sum_hit_points,
+                                                                         completed_rounds))
+    print('Final Score is {}'.format(sum_hit_points*completed_rounds))
+    print('Completed in {:.2f}s'.format(time.time() - start))
 
 battle()
+
+
+"""
+Part 1
+1. 206585 - Wrong, too low
+"""
