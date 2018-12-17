@@ -332,7 +332,7 @@ def battle():
                 u.attack = power
 
         print('Start - Attack Power {}'.format(power))
-        #print_arena(arena, units)
+        print_arena(arena, units)
         completed_rounds = 0
         completed = True
 
@@ -345,7 +345,7 @@ def battle():
                                                           #time.time() - round_end,
                                                           #time.time() - start))
                 round_end = time.time()
-                #print_arena(arena, units)
+                print_arena(arena, units)
 
         deaths = len([u for u in units if u.dead and u.race == 'elf'])
         remaining_units = [u for u in units if not u.dead]
