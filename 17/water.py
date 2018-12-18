@@ -6,7 +6,7 @@ import numpy as np
 
 def read_map():
     # Read input and find edges and lowest point
-    min_x, max_x, min_y, max_y = 500, 500, 0, 0
+    min_x, max_x, min_y, max_y = 500, 500, float('inf'), 0
     veins = []
     for line in sys.stdin:
         digits = [int(i) for i in re.findall('\d+', line)]
@@ -67,22 +67,21 @@ def find_boundaries(x, y, ground_map):
     left_boundary = None
     while left_boundary is None:
         x -= 1
+
         if ground_map[x, y] == '#':
             left_boundary = (x, 'wall')
-        if ground_map[x, y] in '.' and ground_map[x, y+1] == '.':
+        if ground_map[x, y] in ['.', '|'] and ground_map[x, y+1] in ['.', '|']:
             left_boundary = (x, 'drop')
 
     # Find Right boundary
+    x = initial_x
     right_boundary = None
     while right_boundary is None:
         x += 1
-        try:
-            if ground_map[x, y] == '#':
-                right_boundary = (x, 'wall')
-        except:
-            # Debugging issue - seems related to hitting existing streams
-            print_map(ground_map[x-5:x,y-3:y+3])
-        if ground_map[x, y] == '.' and ground_map[x, y+1] == '.':
+
+        if ground_map[x, y] == '#':
+            right_boundary = (x, 'wall')
+        if ground_map[x, y] in ['.', '|'] and ground_map[x, y+1] in ['.', '|']:
             right_boundary = (x, 'drop')
 
     return left_boundary, right_boundary
@@ -99,7 +98,7 @@ def simulate_flow(ground_map, spring, lower_bound):
         x, y = source
 
         # Find floor
-        while ground_map[x, y+1] == '.':
+        while ground_map[x, y+1] in ['.', '|']:
             if y == lower_bound:
                 reached_bound = True
                 break
@@ -131,11 +130,15 @@ def simulate_flow(ground_map, spring, lower_bound):
 
 def water():
     spring, min_y, max_y, ground_map = read_map()
-    #print_map(ground_map, spring)
     simulate_flow(ground_map, spring, max_y)
-    print_map(ground_map, spring)
-    #count_water_tiles(ground_map)
 
+    # Count tiles
+    trimmed = ground_map[:, min_y:max_y+1]
+    unique, counts = np.unique(trimmed, return_counts=True)
+    count_dict = dict(zip(unique, counts))
+    print('The number of water tiles is {}.'.format(count_dict['|'] + count_dict['~']))
+    print('Once the strings runs dry, there will be {} water tiles remaining.'.format(
+        count_dict['~']))
 
 water()
 
