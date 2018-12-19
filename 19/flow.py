@@ -39,23 +39,66 @@ def function_factory(given_operator, immediate_A=False, immediate_B=False):
 
     return f
 
+def function_description_factory(given_operator, immediate_A=False, immediate_B=False):
+    """
+    Generates a function that prints the operation in python style code for ease of understanding.
+    """
+    symbols = {
+        operator.add: '+',
+        operator.mul: '*',
+        operator.and_: '&',
+        operator.or_: '|',
+        operator.setitem: '=',
+        operator.gt: '>',
+        operator.eq: '=='
+    }
 
-def run_program(ip, instructions, initial_register, functions):
+    def f(A, B, C):
+        target = f'r[{C}]'
+        opA = str(A) if immediate_A else f'r[{A}]'
+        opB = str(B) if immediate_B else f'r[{B}]'
+        symbol = symbols[given_operator]
+
+
+        if given_operator == operator.setitem:
+            return f'{target} = {opA}'
+
+        elif given_operator in [operator.gt, operator.eq, operator.and_, operator.or_]:
+            return f'{target} = {opA} {symbol} {opB}'
+
+        else:
+            if opA == target:
+                return f'{target} {symbol}= {opB}'
+            elif opB == target:
+                return f'{target} {symbol}= {opA}'
+            else:
+                return f'{target} = {opA} {symbol} {opB}'
+
+    return f
+
+
+def translate_instructions(instructions, descriptions):
+    for idx, instruction in enumerate(instructions):
+        opcode, A, B, C = instruction
+        print(f'IP{idx}: {descriptions[opcode](A, B, C)}')
+
+def run_program(ip, instructions, initial_register, functions, descriptions):
     register = initial_register.copy()
     count = 0
     print('Start', register)
     while 0 <= register[ip] < len(instructions):
-        opcode, A, B, C = instructions[register[ip]]
+        instrution_number = register[ip]
+        opcode, A, B, C = instructions[instrution_number]
         register = functions[opcode](register, A, B, C)
 
         # Iterate instructions
         register[ip] += 1 # Move to next instruction
         count += 1
 
-        print(count, register, opcode, A, B, C)
+        if count % 100000 == 0:
+            print(count)
 
-        #if count == 100:
-            #exit()
+    return register
 
 
 def flow():
@@ -78,9 +121,31 @@ def flow():
         'eqri': function_factory(operator.eq, immediate_B=True),
         'eqrr': function_factory(operator.eq),
     }
+
+    descriptions = {
+        'addr': function_description_factory(operator.add),
+        'addi': function_description_factory(operator.add, immediate_B=True),
+        'mulr': function_description_factory(operator.mul),
+        'muli': function_description_factory(operator.mul, immediate_B=True),
+        'banr': function_description_factory(operator.and_),
+        'bani': function_description_factory(operator.and_, immediate_B=True),
+        'borr': function_description_factory(operator.or_),
+        'bori': function_description_factory(operator.or_, immediate_B=True),
+        'setr': function_description_factory(operator.setitem),
+        'seti': function_description_factory(operator.setitem, immediate_A=True),
+        'gtir': function_description_factory(operator.gt, immediate_A=True),
+        'gtri': function_description_factory(operator.gt, immediate_B=True),
+        'gtrr': function_description_factory(operator.gt),
+        'eqir': function_description_factory(operator.eq, immediate_A=True),
+        'eqri': function_description_factory(operator.eq, immediate_B=True),
+        'eqrr': function_description_factory(operator.eq),
+    }
+
     ip, instructions = read_data()
 
-    #register = run_program(ip, instructions, [1, 0, 0, 0, 0, 0], functions)
-    register = run_program(ip, instructions, [1, 10551383, 2, 0, 10551380, 5], functions)
+    # Part 1
+    register = run_program(ip, instructions, [0, 0, 0, 0, 0, 0], functions, descriptions)
+    print(register)
+
 
 flow()
