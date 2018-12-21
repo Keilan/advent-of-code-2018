@@ -26,10 +26,10 @@ def function_factory(given_operator, immediate_A=False, immediate_B=False):
     def f(register, A, B, C):
         result = register.copy()
 
-        #Read from registers
+        # Read from registers
         A = A if immediate_A else result[A]
 
-        #Handle setitem seperately because the operator takes 3 values
+        # Handle setitem seperately because the operator takes 3 values
         if given_operator == operator.setitem:
             given_operator(result, C, A)
         else:
@@ -38,6 +38,7 @@ def function_factory(given_operator, immediate_A=False, immediate_B=False):
         return result
 
     return f
+
 
 def function_description_factory(given_operator, immediate_A=False, immediate_B=False):
     """
@@ -58,7 +59,6 @@ def function_description_factory(given_operator, immediate_A=False, immediate_B=
         opA = str(A) if immediate_A else f'r[{A}]'
         opB = str(B) if immediate_B else f'r[{B}]'
         symbol = symbols[given_operator]
-
 
         if given_operator == operator.setitem:
             return f'{target} = {opA}'
@@ -81,6 +81,7 @@ def translate_instructions(instructions, descriptions):
     for idx, instruction in enumerate(instructions):
         opcode, A, B, C = instruction
         print(f'IP{idx}: {descriptions[opcode](A, B, C)}')
+
 
 def run_program(ip, instructions, initial_register, functions, descriptions):
     register = initial_register.copy()
