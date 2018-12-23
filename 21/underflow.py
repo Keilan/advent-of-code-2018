@@ -84,6 +84,7 @@ def translate_instructions(instructions, descriptions):
         print(f'IP{idx}: {descriptions[opcode](A, B, C)}')
 
 
+seen = set()
 def run_program(ip, instructions, initial_register, functions, descriptions):
     register = initial_register.copy()
     count = 0
@@ -99,7 +100,12 @@ def run_program(ip, instructions, initial_register, functions, descriptions):
         count += 1
 
         if instruction_number == 28:
-            print(count, register)
+            r1 = register[1]
+            if r1 in seen:
+                print('Duplicate')
+            else:
+                seen.add(r1)
+                print(len(seen), r1)
 
     return register
 

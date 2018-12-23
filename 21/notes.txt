@@ -49,4 +49,6 @@ IP28: r[4] = r[1] == r[0]
 IP29: r[2] += r[4]
 IP30: r[2] = 5
 
-Answer: Solved by printing the first time we hit IP28, and making r[0] match r[1] at that point
+Answer 1: Solved by printing the first time we hit IP28, and making r[0] match r[1] at that point
+Answer 2: Observed that some sort of modular multiplication was happening, stored all r[0] potential values
+ in a set and then selected the last non-duplicated one we came across
