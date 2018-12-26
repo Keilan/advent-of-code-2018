@@ -1,4 +1,5 @@
 import re
+import copy
 from enum import Enum
 
 
@@ -29,10 +30,18 @@ class Group:
         self.immunities = immunities
         self.initiative = initiative
 
+    @property
+    def name(self):
+        return '{} {}'.format(self.army.name, self.id_number)
+
+    @property
+    def effective_power(self):
+        return self.units * self.damage
+
     def __repr__(self):
-        return '{} {} - {} units with {} HP, {} {} damage, initiative {}'.format(
-            self.army.name, self.id_number, self.units, self.hp, self.damage_type, self.damage,
-            self.initiative
+        return '{} - {} units ({} HP, {} {} DMG, {} INT) - {} EP'.format(
+            self.name, self.units, self.hp, self.damage, self.damage_type.name,
+            self.initiative, self.effective_power
         )
 
 
@@ -68,11 +77,11 @@ def read_input(filename):
             for data in section.split(';'):
                 data = data.replace(',', '').split()  # Remove commas
                 if data[0] == 'weak':
-                    for damage_type in data[2:]:
-                        weaknesses.append(Damage(damage_type.title()))
+                    for weakness_type in data[2:]:
+                        weaknesses.append(Damage(weakness_type.title()))
                 elif data[0] == 'immune':
-                    for damage_type in data[2:]:
-                        immunities.append(Damage(damage_type.title()))
+                    for immunity_type in data[2:]:
+                        immunities.append(Damage(immunity_type.title()))
 
             g = Group(current_army, current_id, units, hp, damage, damage_type, weaknesses,
                       immunities, initiative)
@@ -82,9 +91,126 @@ def read_input(filename):
     return groups
 
 
+def calculate_damage(attacker, defender):
+    # No damage done if the defender is immune
+    if attacker.damage_type in defender.immunities:
+        return 0
+
+    damage = attacker.effective_power
+
+    # Apply weaknesses
+    if attacker.damage_type in defender.weaknesses:
+        damage *= 2
+
+    return damage
+
+
+def select_target(group, groups, unavailable):
+    max_damage = 0
+    target = None
+
+    for other in groups:
+        #Don't attack yourself or your own team
+        if group.army == other.army:
+            continue
+
+        #Don't attack a group already being attacked or one that is dead
+        if other in unavailable or other.units == 0:
+            continue
+
+        damage = calculate_damage(group, other)
+
+        #Don't attack an immune group
+        if damage == 0:
+            continue
+
+        if damage > max_damage:
+            max_damage = damage
+            target = other
+
+        # Resolve ties
+        elif damage == max_damage:
+            if ((other.effective_power, other.initiative) >
+                    (target.effective_power, target.initiative)):
+                target = other
+
+    return target
+
+
+def apply_damage(group, damage):
+    units_killed = damage//group.hp
+    group.units = max(0, group.units - units_killed)
+
+
+def both_alive(groups):
+    alive = set()
+    for g in groups:
+        if g.units > 0:
+            alive.add(g.army)
+
+    return len(alive) == 2
+
+
+def fight(groups):
+    # Target selection
+    targets = {}  # Map a group to the group they are attacking
+    for group in sorted(groups, key=lambda g: (-g.effective_power, -g.initiative)):
+        target = select_target(group, groups, targets.values())
+        if target is not None:
+            targets[group] = target
+
+    # Attack
+    for group in sorted(groups, key=lambda g: (-g.initiative)):
+        # Groups with no units or no target cannot attack
+        if group.units == 0 or group not in targets:
+            continue
+
+        target = targets[group]
+        damage = calculate_damage(group, target)
+        #print('{} deals {} damage to {}'.format(group.name, damage, target.name))
+        apply_damage(target, damage)
+
+
 def simulate_battle():
-    groups = read_input('test.txt')
-    print(groups)
+    initial_groups = read_input('input.txt')
+    winner = None
+    boost = 0
+
+    while winner != Army.Immune:
+        groups = copy.deepcopy(initial_groups)
+
+        # Apply the boost
+        for g in groups:
+            if g.army == Army.Immune:
+                g.damage += boost
+
+        stalemate = False
+        prev_units = sum([g.units for g in groups])
+        fight_count = 1
+        while both_alive(groups):
+            fight(groups)
+            fight_count += 1
+
+            # Stalemate check
+            current_units = sum([g.units for g in groups])
+            if current_units == prev_units:
+                stalemate = True
+                break
+
+            prev_units = current_units
+
+        # Determine winner
+        if stalemate:
+            print('There was a stalemate (boost was {})'.format(boost))
+        else:
+            surviving_groups = [g for g in groups if g.units > 0]
+            winner = surviving_groups[0].army
+
+            print('{} won after {} fights with {} surviving units (boost was {}).'.format(
+                winner.name, fight_count, sum([g.units for g in groups]), boost)
+            )
+
+        boost += 1
 
 
 simulate_battle()
