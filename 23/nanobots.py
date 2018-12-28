@@ -137,19 +137,20 @@ def nanobots():
 
     for bot in tqdm.tqdm(bots):
         r = bot[3]
-        for axis in range(3):
-            for mult in [-1, 1]:
-                coordinates = bot[:3]
-                coordinates[axis] += r * mult
-                reachable = count_can_reach(*coordinates, bots=bots)
+        for radius in [1, r//2, r]: # Check some extra points for added granularity
+            for axis in range(3):
+                for mult in [-1, 1]:
+                    coordinates = bot[:3]
+                    coordinates[axis] += radius * mult
+                    reachable = count_can_reach(*coordinates, bots=bots)
 
-                if reachable > max_reachable:
-                    max_reachable = reachable
-                    reachable_distance = sum(abs(coordinates))
-                    reachable_coords = coordinates.copy()
-                elif reachable == max_reachable and reachable_distance > sum(abs(coordinates)):
-                    reachable_distance = sum(abs(coordinates))
-                    reachable_coords = coordinates.copy()
+                    if reachable > max_reachable:
+                        max_reachable = reachable
+                        reachable_distance = sum(abs(coordinates))
+                        reachable_coords = coordinates.copy()
+                    elif reachable == max_reachable and reachable_distance > sum(abs(coordinates)):
+                        reachable_distance = sum(abs(coordinates))
+                        reachable_coords = coordinates.copy()
 
     print('Initial search found {} in range at {} - with a distance of {}'.format(max_reachable,
                                                                                   reachable_coords,
@@ -164,7 +165,7 @@ def nanobots():
         # Repeat scan while better results exist
         distance, new_coords = scan_region(coords, bots, 1)
         count = 0
-        while any(coords != new_coords) and count <= 100000:
+        while any(coords != new_coords) and count <= 1000000:
             count += 1
 
             if count % 10000 == 0:
